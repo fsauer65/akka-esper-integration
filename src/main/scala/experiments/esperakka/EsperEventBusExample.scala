@@ -21,6 +21,11 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
     registerEventType("Price", classOf[Price])
     registerEventType("Trade", classOf[Trade])
   }
+
+  // add some crazy esper rules
+  addStatement("insert into MarketData select * from Price")
+  addStatement("insert into MyTrades select * from Trade")
+
 }
 
 class ConsumerActor extends Actor {
@@ -38,10 +43,6 @@ object EsperEventBusApp extends App {
   // subscribe to new events appearing in the MyAwesomeOutput stream
   evtBus.subscribe(consumer, "inserted/MarketData")
   evtBus.subscribe(consumer, "inserted/MyTrades")
-
-  // add some crazy esper rules
-  evtBus.addStatement("insert into MarketData select * from Price")
-  evtBus.addStatement("insert into MyTrades select * from Trade")
 
   // insert a bunch of TestEvents
   val symbols = Array("AAPL", "IBM", "GOOG", "QQQ")
