@@ -9,8 +9,8 @@ sealed trait Side
 case object BUY extends Side
 case object SELL extends Side
 
-case class Trade(@BeanProperty val symbol: String, @BeanProperty val price: BigDecimal, @BeanProperty side: Side)
-case class Price(@BeanProperty val symbol: String, @BeanProperty val price: BigDecimal)
+case class Trade(@BeanProperty val symbol: String, @BeanProperty val price: Double, @BeanProperty side: Side)
+case class Price(@BeanProperty val symbol: String, @BeanProperty val price: Double)
 
 
 class EsperEventBusExample extends ActorEventBus with EsperClassification {
@@ -23,8 +23,8 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
   }
 
   // add some crazy esper rules
-  addStatement("insert into MarketData select * from Price")
-  addStatement("insert into MyTrades select * from Trade")
+  addStatement("insert into MarketData select * from Price where symbol='IBM' and price >= 800")
+  addStatement("insert into MyTrades select * from Trade(symbol='AAPL') where price >= 800")
 
 }
 
