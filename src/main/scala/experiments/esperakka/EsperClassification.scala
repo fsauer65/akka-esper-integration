@@ -25,10 +25,6 @@ abstract trait EsperClassification extends LookupClassification {
 
   val esperConfig = new Configuration()
 
-  def registerEsperEventTypes
-
-  registerEsperEventTypes
-
   lazy val epService = EPServiceProviderManager.getDefaultProvider(esperConfig)
   lazy val epRuntime = epService.getEPRuntime
 

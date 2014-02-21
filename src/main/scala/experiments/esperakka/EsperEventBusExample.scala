@@ -17,10 +17,9 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
 
   type EsperEvents = union[Price] #or [Trade]
 
-  override def registerEsperEventTypes {
-    registerEventType("Price", classOf[Price])
-    registerEventType("Trade", classOf[Trade])
-  }
+  // you need to register all types BEFORE adding any statements or publishing any events
+  registerEventType("Price", classOf[Price])
+  registerEventType("Trade", classOf[Trade])
 
   // add some crazy esper rules
   addStatement("insert into MarketData select * from Price where symbol='IBM' and price >= 800")
