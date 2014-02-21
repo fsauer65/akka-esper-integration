@@ -21,15 +21,28 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
   registerEventType("Price", classOf[Price])
   registerEventType("Trade", classOf[Trade])
 
-  // add some crazy esper rules
-  addStatement("insert into MarketData select * from Price where symbol='IBM' and price >= 800")
-  addStatement("insert into MyTrades select * from Trade(symbol='AAPL') where price >= 800")
+  // simulate a simple trading algo: ( buy(S) if avg(S) > first(S)) in a moving window of length 4
+
+  // delay prices by 4 events per symbol
+  addStatement("insert into delayed select rstream * from Price.std:groupwin(symbol).win:length(4)")
+  // running avg over the last 4 prices for each symbol
+  addStatement("insert into averages select symbol, avg(price) as avgPrice from Price.win:length(4) group by symbol")
+  // the actual buy rule
+  addStatement(
+    """
+      insert into Trades
+      select p.symbol as symbol, p.price as price, "BUY" as side
+      from Price as p unidirectional,
+           delayed.std:unique(symbol) as d,
+           averages.std:unique(symbol) as a
+      where p.symbol = d.symbol and p.symbol = a.symbol and a.avgPrice > d.price
+    """)
 
 }
 
 class ConsumerActor extends Actor {
   def receive = {
-    case EventBean(evtType,underlying) => println(s"Got a new event: $underlying of type $evtType")
+    case EventBean(evtType,underlying) => println(s"Got a new event: $underlying of type ${evtType.getName}")
   }
 }
 
@@ -40,13 +53,15 @@ object EsperEventBusApp extends App {
   val consumer = system.actorOf(Props(classOf[ConsumerActor]))
 
   // subscribe to new events appearing in the MyAwesomeOutput stream
-  evtBus.subscribe(consumer, "inserted/MarketData")
-  evtBus.subscribe(consumer, "inserted/MyTrades")
+  evtBus.subscribe(consumer, "removed/delayed")
+  evtBus.subscribe(consumer, "inserted/averages")
+  evtBus.subscribe(consumer, "inserted/Trades")
 
-  // insert a bunch of TestEvents
-  val symbols = Array("AAPL", "IBM", "GOOG", "QQQ")
-  val sides = Array(BUY,SELL)
-  (1 to 10) foreach { i => evtBus.publishEvent(Price(symbols(i%symbols.length), i*100))}
-  (1 to 10) foreach { i => evtBus.publishEvent(Trade(symbols(i%symbols.length), i*100, sides(i%2)))}
+  val marketData = Array(
+    Price("BP", 7.61), Price("RDSA", 2201.00), Price("RDSA", 2209.00),
+    Price("BP",7.66), Price("BP", 7.64), Price("BP", 7.67)
+  )
+  // feed in the market data
+  marketData foreach (evtBus.publishEvent(_))
 }
 

@@ -2,9 +2,7 @@ package experiments.esperakka
 
 import com.espertech.esper.client._
 import akka.event.{LookupClassification, ActorEventBus}
-import com.gensler.scalavro.util.Union
 import com.gensler.scalavro.util.Union._
-import scala.reflect.runtime.{universe => ru}
 
 object EventBean {
   def unapply(evt: com.espertech.esper.client.EventBean) = Some(evt.getEventType, evt.getUnderlying)
