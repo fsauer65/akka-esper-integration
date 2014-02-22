@@ -61,4 +61,4 @@ After submitting the following data you'll see a Buy being generated:
 
 Output:
 
-    Got a new buy: 1000 BP @ @ 7.67
+    Got a new buy: 1000 BP @ $7.67
