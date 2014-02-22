@@ -33,7 +33,7 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
 
 class BuyingActor extends Actor {
   def receive = {
-    case Buy(sym,price,amt) => println(s"Got a new buy: $amt $sym @ @ $price")
+    case Buy(sym,price,amt) => println(s"Got a new buy: $amt $sym @ $price")
   }
 }
 
