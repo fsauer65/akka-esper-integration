@@ -5,44 +5,35 @@ import scala.beans.BeanProperty
 import akka.actor.{Actor, Props, ActorSystem}
 import com.gensler.scalavro.util.Union.union
 
-sealed trait Side
-case object BUY extends Side
-case object SELL extends Side
-
-case class Trade(@BeanProperty val symbol: String, @BeanProperty val price: Double, @BeanProperty side: Side)
-case class Price(@BeanProperty val symbol: String, @BeanProperty val price: Double)
+case class Price(@BeanProperty symbol: String, @BeanProperty price: Double)
+case class Buy(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
+case class Sell(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
 
 
 class EsperEventBusExample extends ActorEventBus with EsperClassification {
 
-  type EsperEvents = union[Price] #or [Trade]
+  type EsperEvents = union[Price] #or [Sell] #or [Buy]
 
   // you need to register all types BEFORE adding any statements or publishing any events
   registerEventType("Price", classOf[Price])
-  registerEventType("Trade", classOf[Trade])
+  registerEventType("Buy", classOf[Buy])
+  registerEventType("Sell", classOf[Buy])
 
-  // simulate a simple trading algo: ( buy(S) if avg(S) > first(S)) in a moving window of length 4
-
-  // delay prices by 4 events per symbol
-  addStatement("insert into delayed select rstream * from Price.std:groupwin(symbol).win:length(4)")
-  // running avg over the last 4 prices for each symbol
-  addStatement("insert into averages select symbol, avg(price) as avgPrice from Price.win:length(4) group by symbol")
-  // the actual buy rule
-  addStatement(
+  // generate a Buy order for a quantity of 1000 at the newest price,
+  // if the simple average of the last 4 prices is greater than the oldest price in that collection of 4 prices
+  // This is just one way you could do this in Esper, not necessarily the best way...
+  epl(
     """
-      insert into Trades
-      select p.symbol as symbol, p.price as price, "BUY" as side
-      from Price as p unidirectional,
-           delayed.std:unique(symbol) as d,
-           averages.std:unique(symbol) as a
-      where p.symbol = d.symbol and p.symbol = a.symbol and a.avgPrice > d.price
+      insert into Buy
+      select a.symbol as symbol, d.price as price, 1000 as amount
+      from pattern[every a=Price -> b=Price(symbol=a.symbol) -> c=Price(symbol=a.symbol) -> d=Price(symbol=a.symbol)]
+      where (a.price + b.price + c.price + d.price) > 4*a.price
     """)
-
 }
 
-class ConsumerActor extends Actor {
+class BuyingActor extends Actor {
   def receive = {
-    case EventBean(evtType,underlying) => println(s"Got a new event: $underlying of type ${evtType.getName}")
+    case Buy(sym,price,amt) => println(s"Got a new buy: $amt $sym @ @ $price")
   }
 }
 
@@ -50,18 +41,21 @@ object EsperEventBusApp extends App {
   // set up the event bus and actor(s)
   val system = ActorSystem()
   val evtBus = new EsperEventBusExample
-  val consumer = system.actorOf(Props(classOf[ConsumerActor]))
+  val buyer = system.actorOf(Props(classOf[BuyingActor]))
 
-  // subscribe to new events appearing in the MyAwesomeOutput stream
-  evtBus.subscribe(consumer, "removed/delayed")
-  evtBus.subscribe(consumer, "inserted/averages")
-  evtBus.subscribe(consumer, "inserted/Trades")
+  // subscribe to buys
+  evtBus.subscribe(buyer, "inserted/Buy")
 
-  val marketData = Array(
-    Price("BP", 7.61), Price("RDSA", 2201.00), Price("RDSA", 2209.00),
+  val prices = Array(
+    Price("BP", 7.61), Price("RDSA", 2101.00), Price("RDSA", 2209.00),
     Price("BP",7.66), Price("BP", 7.64), Price("BP", 7.67)
   )
+
   // feed in the market data
-  marketData foreach (evtBus.publishEvent(_))
+  prices foreach (evtBus.publishEvent(_))
+
+  // demonstrate we can also submit Sells and Buys to the event bus, thanks to the union type
+  evtBus.publishEvent(Buy("IBM",182.79, 100))
+  evtBus.publishEvent(Sell("NBG",4.71, 1000))
 }
 

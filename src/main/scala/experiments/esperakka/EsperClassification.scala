@@ -44,8 +44,8 @@ abstract trait EsperClassification extends LookupClassification {
 
   protected def publish(event: Event, subscriber: Subscriber): Unit = {
     event match {
-      case NewEvent(evt) => subscriber ! evt
-      case RemovedEvent(evt) => subscriber ! evt
+      case NewEvent(evt) => subscriber ! evt.getUnderlying
+      case RemovedEvent(evt) => subscriber ! evt.getUnderlying
     }
   }
 
@@ -53,7 +53,7 @@ abstract trait EsperClassification extends LookupClassification {
     epRuntime.sendEvent(evt)
   }
 
-  def addStatement(epl: String) {
+  def epl(epl: String) {
     def insert(evt: EventBean) = publish(NewEvent(evt))
     def remove(evt: EventBean) = publish(RemovedEvent(evt))
     try {
