@@ -29,11 +29,21 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
       from pattern[every a=Price -> b=Price(symbol=a.symbol) -> c=Price(symbol=a.symbol) -> d=Price(symbol=a.symbol)]
       where (a.price + b.price + c.price + d.price) > 4*a.price
     """)
+
+  epl("Feed", "select * from Price")
+  epl("Delayed", "select rstream symbol,price as delayedPrice from Price.std:groupwin(symbol).win:length(4)")
+  epl("Average", "select symbol,avg(price) as avgPrice from Price.std:groupwin(symbol).win:length_batch(4) group by symbol")
 }
 
 class BuyingActor extends Actor {
   def receive = {
-    case Buy(sym,price,amt) => println(s"Got a new buy: $amt $sym @ $$$price")
+    case EventBean(_,Buy(sym,price,amt)) => println(s"Got a new buy: $amt $sym @ $$$price")
+  }
+}
+
+class Debugger extends Actor {
+  def receive = {
+    case EventBean(evtType,underlying) => println(s"Got a new ${evtType.getName} : $underlying")
   }
 }
 
@@ -42,9 +52,15 @@ object EsperEventBusApp extends App {
   val system = ActorSystem()
   val evtBus = new EsperEventBusExample
   val buyer = system.actorOf(Props(classOf[BuyingActor]))
+  val debugger = system.actorOf(Props(classOf[Debugger]))
 
   // subscribe to buys
   evtBus.subscribe(buyer, "inserted/Buy")
+  // subscribe to various intermediate streams for debugging purposes
+  evtBus.subscribe(debugger, "inserted/Feed")
+  evtBus.subscribe(debugger, "inserted/Delayed")
+  evtBus.subscribe(debugger, "removed/Delayed")
+  evtBus.subscribe(debugger, "inserted/Average")
 
   val prices = Array(
     Price("BP", 7.61), Price("RDSA", 2101.00), Price("RDSA", 2209.00),

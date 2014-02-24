@@ -15,8 +15,8 @@ abstract trait EsperClassification extends LookupClassification {
   type EsperEvents
 
   sealed trait InternalEvent
-  case class NewEvent (evt: EventBean) extends InternalEvent
-  case class RemovedEvent(evt: EventBean) extends InternalEvent
+  case class NewEvent (topic:String, evt: EventBean) extends InternalEvent
+  case class RemovedEvent(topic:String, evt: EventBean) extends InternalEvent
 
   type Event = InternalEvent
   type Classifier = String
@@ -38,14 +38,14 @@ abstract trait EsperClassification extends LookupClassification {
    * @return
    */
   protected def classify(event: Event): Classifier = event match {
-    case NewEvent(evt) => s"inserted/${evt.getEventType.getName}"
-    case RemovedEvent(evt) => s"removed/${evt.getEventType.getName}"
+    case NewEvent(topic, evt) => s"inserted/$topic"
+    case RemovedEvent(topic, evt) => s"removed/$topic"
   }
 
   protected def publish(event: Event, subscriber: Subscriber): Unit = {
     event match {
-      case NewEvent(evt) => subscriber ! evt.getUnderlying
-      case RemovedEvent(evt) => subscriber ! evt.getUnderlying
+      case NewEvent(_,evt) => subscriber ! evt
+      case RemovedEvent(_,evt) => subscriber ! evt
     }
   }
 
@@ -53,9 +53,7 @@ abstract trait EsperClassification extends LookupClassification {
     epRuntime.sendEvent(evt)
   }
 
-  def epl(epl: String) {
-    def insert(evt: EventBean) = publish(NewEvent(evt))
-    def remove(evt: EventBean) = publish(RemovedEvent(evt))
+  private def createEPL(epl:String, insert: EventBean=>Unit, remove: EventBean=>Unit) {
     try {
       val stat = epService.getEPAdministrator.createEPL(epl)
       stat.addListener(new UpdateListener() {
@@ -67,6 +65,32 @@ abstract trait EsperClassification extends LookupClassification {
     } catch {
       case x: EPException => println(x.getLocalizedMessage)
     }
+  }
+
+  /**
+   * Create an EPL statement with the given epl.
+   * Subscribers will get notified of the results by subscribing to the event type of the rule's output.
+   * Most useful for 'insert into EvtType select ...' kind of rules
+   * @param epl
+   */
+  def epl(epl: String) {
+    def insert(evt: EventBean) = publish(NewEvent(evt.getEventType.getName,evt))
+    def remove(evt: EventBean) = publish(RemovedEvent(evt.getEventType.getName,evt))
+    createEPL(epl, insert, remove)
+  }
+
+  /**
+   * Create an EPL statement with the given type and epl.
+   * Subscribers will get notified of the results by subscribing to the given event type .
+   * Most useful for simple 'select ...' kind of rules, where you may not know the event type of the result
+   * due to projections resulting in an underlying Map
+   * @param evtType event type used as the subscription topic
+   * @param epl
+   */
+  def epl(evtType:String, epl: String) {
+    def insert(evt: EventBean) = publish(NewEvent(evtType,evt))
+    def remove(evt: EventBean) = publish(RemovedEvent(evtType,evt))
+    createEPL(epl, insert, remove)
   }
 
 }
