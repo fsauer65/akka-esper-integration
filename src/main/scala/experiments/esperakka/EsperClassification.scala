@@ -26,7 +26,7 @@ abstract trait EsperClassification extends LookupClassification {
   lazy val epService = EPServiceProviderManager.getDefaultProvider(esperConfig)
   lazy val epRuntime = epService.getEPRuntime
 
-  def mapSize() = 2
+  protected def mapSize() = 2
 
   protected def registerEventType(name:String, clz: Class[_ <: Any]) {
     esperConfig.addEventType(name, clz.getName)
@@ -42,6 +42,7 @@ abstract trait EsperClassification extends LookupClassification {
     case RemovedEvent(topic, evt) => s"removed/$topic"
   }
 
+  // from LookupCLassification
   protected def publish(event: Event, subscriber: Subscriber): Unit = {
     event match {
       case NewEvent(_,evt) => subscriber ! evt
@@ -49,6 +50,10 @@ abstract trait EsperClassification extends LookupClassification {
     }
   }
 
+  /**
+   * @param evt this event wil be inserted into the esper runtime
+   * @tparam T anything type that can be proven to be part of type EsperEvents - allows for union types
+   */
   def publishEvent[T: prove[EsperEvents]#containsType](evt:T) {
     epRuntime.sendEvent(evt)
   }
@@ -59,6 +64,10 @@ abstract trait EsperClassification extends LookupClassification {
       stat.addListener(new UpdateListener() {
         override def update(newEvents: Array[EventBean], oldEvents: Array[EventBean]) {
           newEvents foreach (insert(_))
+          // TODO see if we really need to support both cases, it would really simplify the API (and subscription topics) if we don't
+          // Esper docs seem to suggest we will almost never get data in oldEvents
+          // The use of rstream will deliver events leaving a window as newEvents, not oldEvents
+          // Only the use of the keyword irstream will result in both newEvents and oldEvents...
           oldEvents foreach (remove(_))
         }
       })

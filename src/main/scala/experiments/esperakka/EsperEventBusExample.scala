@@ -19,31 +19,42 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
   registerEventType("Buy", classOf[Buy])
   registerEventType("Sell", classOf[Buy])
 
-  // generate a Buy order for a quantity of 1000 at the newest price,
-  // if the simple average of the last 4 prices is greater than the oldest price in that collection of 4 prices
-  // This is just one way you could do this in Esper, not necessarily the best way...
+
+  val windowSize = 4
+  val orderSize = 1000
+
+  //
+  // generate a Buy order for a quantity of orderSize at the newest price, if the simple average of the last windowSize prices is greater than the oldest price in that window
+  //
+
+  // this will delay the Price stream by windowSize - 1: the price at position latest - windowSize will fall out of the window into the Delayed stream
+  epl(s"insert rstream into Delayed select rstream symbol,price from Price.std:groupwin(symbol).win:length(${windowSize-1})")
+  // after every windowSize prices for a symbol, the average is inserted into the Averages stream
+  epl(s"insert into Averages select symbol,avg(price) as price from Price.std:groupwin(symbol).win:length_batch($windowSize) group by symbol")
+  // the join is only triggered by a new average (it has the unidrectional keyword), which (see above) is only generated after a full window for a symbol has been seen
   epl(
-    """
+    s"""
       insert into Buy
-      select a.symbol as symbol, d.price as price, 1000 as amount
-      from pattern[every a=Price -> b=Price(symbol=a.symbol) -> c=Price(symbol=a.symbol) -> d=Price(symbol=a.symbol)]
-      where (a.price + b.price + c.price + d.price) > 4*a.price
+      select p.symbol, p.price, $orderSize as amount
+      from Price.std:unique(symbol) p
+      join Delayed.std:unique(symbol) d on d.symbol = p.symbol
+      join Averages a unidirectional on a.symbol = p.symbol
+      where a.price > d.price
     """)
 
+  // for debugging only
   epl("Feed", "select * from Price")
-  epl("Delayed", "select rstream symbol,price as delayedPrice from Price.std:groupwin(symbol).win:length(4)")
-  epl("Average", "select symbol,avg(price) as avgPrice from Price.std:groupwin(symbol).win:length_batch(4) group by symbol")
 }
 
 class BuyingActor extends Actor {
   def receive = {
-    case EventBean(_,Buy(sym,price,amt)) => println(s"Got a new buy: $amt $sym @ $$$price")
+    case EventBean(_,Buy(sym,price,amt)) => println(s"Buyer got a new order: $amt $sym @ $$$price")
   }
 }
 
 class Debugger extends Actor {
   def receive = {
-    case EventBean(evtType,underlying) => println(s"Got a new ${evtType.getName} : $underlying")
+    case EventBean(evtType,underlying) => println(s"DEBUG -  ${evtType.getName} : $underlying")
   }
 }
 
@@ -59,8 +70,7 @@ object EsperEventBusApp extends App {
   // subscribe to various intermediate streams for debugging purposes
   evtBus.subscribe(debugger, "inserted/Feed")
   evtBus.subscribe(debugger, "inserted/Delayed")
-  evtBus.subscribe(debugger, "removed/Delayed")
-  evtBus.subscribe(debugger, "inserted/Average")
+  evtBus.subscribe(debugger, "inserted/Averages")
 
   val prices = Array(
     Price("BP", 7.61), Price("RDSA", 2101.00), Price("RDSA", 2209.00),
