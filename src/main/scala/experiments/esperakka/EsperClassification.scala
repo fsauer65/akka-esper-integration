@@ -3,6 +3,8 @@ package experiments.esperakka
 import com.espertech.esper.client._
 import akka.event.{LookupClassification, ActorEventBus}
 import com.gensler.scalavro.util.Union._
+import com.gensler.scalavro.util.Union
+import scala.reflect.runtime.{currentMirror => m}
 
 object EventBean {
   def unapply(evt: com.espertech.esper.client.EventBean) = Some(evt.getEventType, evt.getUnderlying)
@@ -12,7 +14,9 @@ abstract trait EsperClassification extends LookupClassification {
 
   this : ActorEventBus =>
 
-  type EsperEvents
+  type EsperEvents <: Union.not[_]
+
+  def eventTypes:Union[EsperEvents]
 
   sealed trait InternalEvent
   case class NewEvent (topic:String, evt: EventBean) extends InternalEvent
@@ -23,8 +27,13 @@ abstract trait EsperClassification extends LookupClassification {
 
   val esperConfig = new Configuration()
 
-  lazy val epService = EPServiceProviderManager.getDefaultProvider(esperConfig)
-  lazy val epRuntime = epService.getEPRuntime
+  // this is cool, types are now automagically registered when we need them to, but it would be even cooler
+  // if we did not have to ask the application programmer to instantiate the Union... missing TYpeTags if we attempt to do it here
+  eventTypes.typeMembers() foreach(t => registerEventType(t.typeSymbol.name.toString, m.runtimeClass(t)))
+
+  // these now no longer have to be lazy, since types are guaranteed to be registered at this point
+  val epService = EPServiceProviderManager.getDefaultProvider(esperConfig)
+  val epRuntime = epService.getEPRuntime
 
   protected def mapSize() = 2
 

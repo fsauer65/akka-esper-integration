@@ -4,21 +4,24 @@ import akka.event.ActorEventBus
 import scala.beans.BeanProperty
 import akka.actor.{Actor, Props, ActorSystem}
 import com.gensler.scalavro.util.Union.union
+import com.gensler.scalavro.util.Union
+
+//
+// some sample event classes, @BeanProperty required to be a regular java bean as expected bu Esper
+//
 
 case class Price(@BeanProperty symbol: String, @BeanProperty price: Double)
 case class Buy(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
 case class Sell(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
 
-
 class EsperEventBusExample extends ActorEventBus with EsperClassification {
 
   type EsperEvents = union[Price] #or [Sell] #or [Buy]
 
-  // you need to register all types BEFORE adding any statements or publishing any events
-  registerEventType("Price", classOf[Price])
-  registerEventType("Buy", classOf[Buy])
-  registerEventType("Sell", classOf[Buy])
-
+  // This works, but still feels a little redundant, but much better than before
+  // TODO: why does new Union[EsperEvents] not work inside the EsperClassification trait???
+  // I really would like this to go away and be hidden up in the base trait
+  override def eventTypes = new Union[EsperEvents]
 
   val windowSize = 4
   val orderSize = 1000
@@ -27,10 +30,16 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
   // generate a Buy order for a quantity of orderSize at the newest price, if the simple average of the last windowSize prices is greater than the oldest price in that window
   //
 
+
+  // for debugging only
+  epl("Feed", "select * from Price")
+
   // this will delay the Price stream by windowSize - 1: the price at position latest - windowSize will fall out of the window into the Delayed stream
   epl(s"insert rstream into Delayed select rstream symbol,price from Price.std:groupwin(symbol).win:length(${windowSize-1})")
+
   // after every windowSize prices for a symbol, the average is inserted into the Averages stream
   epl(s"insert into Averages select symbol,avg(price) as price from Price.std:groupwin(symbol).win:length_batch($windowSize) group by symbol")
+
   // the join is only triggered by a new average (it has the unidrectional keyword), which (see above) is only generated after a full window for a symbol has been seen
   epl(
     s"""
@@ -41,9 +50,6 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
       join Averages a unidirectional on a.symbol = p.symbol
       where a.price > d.price
     """)
-
-  // for debugging only
-  epl("Feed", "select * from Price")
 }
 
 class BuyingActor extends Actor {
@@ -65,9 +71,10 @@ object EsperEventBusApp extends App {
   val buyer = system.actorOf(Props(classOf[BuyingActor]))
   val debugger = system.actorOf(Props(classOf[Debugger]))
 
-  // subscribe to buys
+  // subscribe BuyingActor to buy orders
   evtBus.subscribe(buyer, "inserted/Buy")
-  // subscribe to various intermediate streams for debugging purposes
+
+  // subscribe to various intermediate streams for debugging/demonstration purposes
   evtBus.subscribe(debugger, "inserted/Feed")
   evtBus.subscribe(debugger, "inserted/Delayed")
   evtBus.subscribe(debugger, "inserted/Averages")
