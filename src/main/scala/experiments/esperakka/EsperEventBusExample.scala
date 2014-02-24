@@ -21,7 +21,7 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
   // This works, but still feels a little redundant, but much better than before
   // TODO: why does new Union[EsperEvents] not work inside the EsperClassification trait???
   // I really would like this to go away and be hidden up in the base trait
-  override def eventTypes = new Union[EsperEvents]
+  override def esperEventTypes = new Union[EsperEvents]
 
   val windowSize = 4
   val orderSize = 1000

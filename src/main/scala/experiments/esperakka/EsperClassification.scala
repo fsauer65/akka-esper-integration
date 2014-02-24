@@ -16,7 +16,7 @@ abstract trait EsperClassification extends LookupClassification {
 
   type EsperEvents <: Union.not[_]
 
-  def eventTypes:Union[EsperEvents]
+  def esperEventTypes:Union[EsperEvents]
 
   sealed trait InternalEvent
   case class NewEvent (topic:String, evt: EventBean) extends InternalEvent
@@ -29,7 +29,7 @@ abstract trait EsperClassification extends LookupClassification {
 
   // this is cool, types are now automagically registered when we need them to, but it would be even cooler
   // if we did not have to ask the application programmer to instantiate the Union... missing TYpeTags if we attempt to do it here
-  eventTypes.typeMembers() foreach(t => registerEventType(t.typeSymbol.name.toString, m.runtimeClass(t)))
+  esperEventTypes.typeMembers() foreach(t => registerEventType(t.typeSymbol.name.toString, m.runtimeClass(t)))
 
   // these now no longer have to be lazy, since types are guaranteed to be registered at this point
   val epService = EPServiceProviderManager.getDefaultProvider(esperConfig)
