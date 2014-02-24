@@ -18,9 +18,7 @@ abstract trait EsperClassification extends LookupClassification {
 
   def esperEventTypes:Union[EsperEvents]
 
-  sealed trait InternalEvent
-  case class NewEvent (topic:String, evt: EventBean) extends InternalEvent
-  case class RemovedEvent(topic:String, evt: EventBean) extends InternalEvent
+  case class InternalEvent (topic:String, evt: EventBean)
 
   type Event = InternalEvent
   type Classifier = String
@@ -41,22 +39,11 @@ abstract trait EsperClassification extends LookupClassification {
     esperConfig.addEventType(name, clz.getName)
   }
 
-  /**
-   * The topic will be "inserted/<event-type>" or "removed/<event-type>"
-   * @param event
-   * @return
-   */
-  protected def classify(event: Event): Classifier = event match {
-    case NewEvent(topic, evt) => s"inserted/$topic"
-    case RemovedEvent(topic, evt) => s"removed/$topic"
-  }
+  protected def classify(event: InternalEvent): Classifier = event.topic
 
   // from LookupCLassification
-  protected def publish(event: Event, subscriber: Subscriber): Unit = {
-    event match {
-      case NewEvent(_,evt) => subscriber ! evt
-      case RemovedEvent(_,evt) => subscriber ! evt
-    }
+  protected def publish(event: InternalEvent, subscriber: Subscriber): Unit = {
+    subscriber ! event.evt
   }
 
   /**
@@ -67,17 +54,12 @@ abstract trait EsperClassification extends LookupClassification {
     epRuntime.sendEvent(evt)
   }
 
-  private def createEPL(epl:String, insert: EventBean=>Unit, remove: EventBean=>Unit) {
+  private def createEPL(epl:String)(notifySubscribers: EventBean=>Unit) {
     try {
       val stat = epService.getEPAdministrator.createEPL(epl)
       stat.addListener(new UpdateListener() {
         override def update(newEvents: Array[EventBean], oldEvents: Array[EventBean]) {
-          newEvents foreach (insert(_))
-          // TODO see if we really need to support both cases, it would really simplify the API (and subscription topics) if we don't
-          // Esper docs seem to suggest we will almost never get data in oldEvents
-          // The use of rstream will deliver events leaving a window as newEvents, not oldEvents
-          // Only the use of the keyword irstream will result in both newEvents and oldEvents...
-          oldEvents foreach (remove(_))
+          newEvents foreach (notifySubscribers(_))
         }
       })
     } catch {
@@ -92,9 +74,7 @@ abstract trait EsperClassification extends LookupClassification {
    * @param epl
    */
   def epl(epl: String) {
-    def insert(evt: EventBean) = publish(NewEvent(evt.getEventType.getName,evt))
-    def remove(evt: EventBean) = publish(RemovedEvent(evt.getEventType.getName,evt))
-    createEPL(epl, insert, remove)
+    createEPL(epl) {evt => publish(InternalEvent(evt.getEventType.getName,evt))}
   }
 
   /**
@@ -106,9 +86,7 @@ abstract trait EsperClassification extends LookupClassification {
    * @param epl
    */
   def epl(evtType:String, epl: String) {
-    def insert(evt: EventBean) = publish(NewEvent(evtType,evt))
-    def remove(evt: EventBean) = publish(RemovedEvent(evtType,evt))
-    createEPL(epl, insert, remove)
+    createEPL(epl) {evt => publish(InternalEvent(evtType,evt))}
   }
 
 }

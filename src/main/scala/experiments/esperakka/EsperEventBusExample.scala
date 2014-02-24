@@ -14,7 +14,7 @@ case class Price(@BeanProperty symbol: String, @BeanProperty price: Double)
 case class Buy(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
 case class Sell(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
 
-class EsperEventBusExample extends ActorEventBus with EsperClassification {
+class EsperEventBusExample(windowSize:Int, orderSize: Int) extends ActorEventBus with EsperClassification {
 
   type EsperEvents = union[Price] #or [Sell] #or [Buy]
 
@@ -22,9 +22,6 @@ class EsperEventBusExample extends ActorEventBus with EsperClassification {
   // TODO: why does new Union[EsperEvents] not work inside the EsperClassification trait???
   // I really would like this to go away and be hidden up in the base trait
   override def esperEventTypes = new Union[EsperEvents]
-
-  val windowSize = 4
-  val orderSize = 1000
 
   //
   // generate a Buy order for a quantity of orderSize at the newest price, if the simple average of the last windowSize prices is greater than the oldest price in that window
@@ -67,17 +64,17 @@ class Debugger extends Actor {
 object EsperEventBusApp extends App {
   // set up the event bus and actor(s)
   val system = ActorSystem()
-  val evtBus = new EsperEventBusExample
+  val evtBus = new EsperEventBusExample(4,1000)
   val buyer = system.actorOf(Props(classOf[BuyingActor]))
   val debugger = system.actorOf(Props(classOf[Debugger]))
 
   // subscribe BuyingActor to buy orders
-  evtBus.subscribe(buyer, "inserted/Buy")
+  evtBus.subscribe(buyer, "Buy")
 
   // subscribe to various intermediate streams for debugging/demonstration purposes
-  evtBus.subscribe(debugger, "inserted/Feed")
-  evtBus.subscribe(debugger, "inserted/Delayed")
-  evtBus.subscribe(debugger, "inserted/Averages")
+  evtBus.subscribe(debugger, "Feed")
+  evtBus.subscribe(debugger, "Delayed")
+  evtBus.subscribe(debugger, "Averages")
 
   val prices = Array(
     Price("BP", 7.61), Price("RDSA", 2101.00), Price("RDSA", 2209.00),

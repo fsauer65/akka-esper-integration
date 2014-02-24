@@ -43,11 +43,7 @@ The above event bus is used as follows:
     val buyer = system.actorOf(Props(classOf[BuyingActor]))
 
     // subscribe to buys
-    evtBus.subscribe(buyer, "inserted/Buy")
-
-Note the topic (or classification). These start with "inserted/" or "removed/". The reason for this that almost
-all queries in Esper revolve around sliding windows with event entering and leaving these windows.
-You react to new events by subscribing to _inserted/type_ and old events leaving the windows by subscribing to _removed/type_.
+    evtBus.subscribe(buyer, "Buy")
 
 After submitting the following data you'll see a Buy being generated:
 
