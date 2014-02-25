@@ -10,10 +10,7 @@ will receive the events published as a result of the esper rules firing.
 
       type EsperEvents = union[Price] #or [Sell] #or [Buy]
 
-      // you need to register all types BEFORE adding any statements or publishing any events
-      registerEventType("Price", classOf[Price])
-      registerEventType("Buy", classOf[Buy])
-      registerEventType("Sell", classOf[Buy])
+      override def esperEventTypes = new Union[EsperEvents]
 
       // generate a Buy order for a quantity of 1000 at the newest price,
       // if the simple average of the last 4 prices is greater than the oldest price in that collection of 4 prices
