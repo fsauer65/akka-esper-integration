@@ -67,10 +67,13 @@ class Debugger extends Actor {
   }
 }
 
+class EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule
+
 object EsperEventBusApp extends App {
   // set up the event bus and actor(s)
   val system = ActorSystem()
-  val evtBus = new EsperEventBusExample(4,1000)
+  //val evtBus = new EsperEventBusExample(4,1000)
+  val evtBus = new EsperEventBusWithModuleExample
   val buyer = system.actorOf(Props(classOf[BuyingActor]))
   val debugger = system.actorOf(Props(classOf[Debugger]))
 

@@ -5,6 +5,7 @@ import akka.event.{LookupClassification, ActorEventBus}
 import com.gensler.scalavro.util.Union._
 import com.gensler.scalavro.util.Union
 import scala.reflect.runtime.{currentMirror => m}
+import scala.collection.JavaConversions._
 
 object EventBean {
   def unapply(evt: com.espertech.esper.client.EventBean) = Some(evt.getEventType, evt.getUnderlying)
@@ -89,4 +90,20 @@ abstract trait EsperClassification extends LookupClassification {
     createEPL(epl) {evt => publish(InternalEvent(evtType,evt))}
   }
 
+  def installModule(text:String, publishStatements: List[String]) {
+    try {
+      def notifySubscribers(evt:EventBean) = publish(InternalEvent(evt.getEventType.getName,evt))
+      val deploymentResult = epService.getEPAdministrator.getDeploymentAdmin.parseDeploy(text)
+      deploymentResult.getStatements.filter(s=>publishStatements.contains(s.getName)).foreach { s =>
+        s.addListener(new UpdateListener() {
+          override def update(newEvents: Array[EventBean], oldEvents: Array[EventBean]) {
+            newEvents foreach (notifySubscribers(_))
+          }
+        })
+      }
+
+    } catch {
+      case x: EPException => println(x.getLocalizedMessage)
+    }
+  }
 }
