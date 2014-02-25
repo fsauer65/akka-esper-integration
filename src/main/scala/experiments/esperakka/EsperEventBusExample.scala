@@ -7,37 +7,43 @@ import com.gensler.scalavro.util.Union.union
 import com.gensler.scalavro.util.Union
 
 //
-// some sample event classes, @BeanProperty required to be a regular java bean as expected bu Esper
+// some sample event classes, @BeanProperty required to be a regular java bean as expected by Esper
 //
 
 case class Price(@BeanProperty symbol: String, @BeanProperty price: Double)
 case class Buy(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
 case class Sell(@BeanProperty symbol: String, @BeanProperty price: Double, @BeanProperty amount: Long)
 
+/**
+ * An ActorEventBus routing events to subscribers via Esper rules.
+ * The sample esper rules implement a simplified trading algorithm
+ * @param windowSize  moving window size for the sample trading algorithm
+ * @param orderSize   number of shares for buy orders
+ */
 class EsperEventBusExample(windowSize:Int, orderSize: Int) extends ActorEventBus with EsperClassification {
 
   type EsperEvents = union[Price] #or [Sell] #or [Buy]
 
-  // This works, but still feels a little redundant, but much better than before
-  // TODO: why does new Union[EsperEvents] not work inside the EsperClassification trait???
-  // I really would like this to go away and be hidden up in the base trait
+  // unfortunately this has to be defined here where the type evidence is available to the compiler.
+  // this will be the exact same in every event bus using EsperClassification, you can copy/paste (YUCK!) it.
   override def esperEventTypes = new Union[EsperEvents]
 
   //
   // generate a Buy order for a quantity of orderSize at the newest price, if the simple average of the last windowSize prices is greater than the oldest price in that window
   //
 
-
   // for debugging only
   epl("Feed", "select * from Price")
 
-  // this will delay the Price stream by windowSize - 1: the price at position latest - windowSize will fall out of the window into the Delayed stream
+  // this will delay the Price stream by windowSize - 1:
+  // the price at position latest - windowSize will fall out of the window into the Delayed stream
   epl(s"insert rstream into Delayed select rstream symbol,price from Price.std:groupwin(symbol).win:length(${windowSize-1})")
 
   // after every windowSize prices for a symbol, the average is inserted into the Averages stream
   epl(s"insert into Averages select symbol,avg(price) as price from Price.std:groupwin(symbol).win:length_batch($windowSize) group by symbol")
 
-  // the join is only triggered by a new average (it has the unidrectional keyword), which (see above) is only generated after a full window for a symbol has been seen
+  // the join is only triggered by a new average (because it has the unidrectional keyword), which (see above) is only
+  // generated after windowSize prices for a given symbol has been seen (due to the length_batch window)
   epl(
     s"""
       insert into Buy

@@ -35,7 +35,7 @@ abstract trait EsperClassification extends LookupClassification {
 
   protected def mapSize() = 2
 
-  protected def registerEventType(name:String, clz: Class[_ <: Any]) {
+  private def registerEventType(name:String, clz: Class[_ <: Any]) {
     esperConfig.addEventType(name, clz.getName)
   }
 
