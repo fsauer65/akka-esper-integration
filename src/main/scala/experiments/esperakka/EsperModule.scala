@@ -21,11 +21,10 @@ trait EsperModule {
       val deploymentResult = epService.getEPAdministrator.getDeploymentAdmin.parseDeploy(moduleText)
       deploymentResult.getStatements.foreach {s =>
         // find those statements that have a @Name annotation
-        val annotations = s.getAnnotations
-        annotations.filter(a => a.annotationType == classOf[Name]).foreach {a =>
+        s.getAnnotations.filter(a => a.annotationType == classOf[Name]).foreach {a =>
           val name = a.asInstanceOf[Name]
           // use the @Name("value") as the topic when the rule fires
-          def notifySubscribers(evt:EB) = publish(InternalEvent(name.value(),evt))
+          def notifySubscribers(evt:EB) = publish(InternalEvent(name.value,evt))
           // install an UpdateListener for this rule
           s.addListener(new UpdateListener() {
             override def update(newEvents: Array[EB], oldEvents: Array[EB]) {
