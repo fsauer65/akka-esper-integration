@@ -1,21 +1,13 @@
 package experiments.esperakka
 
-import com.gensler.scalavro.util.Union
-import com.gensler.scalavro.util.Union._
 
-/**
- * Created by fsauer on 2/25/14.
- */
-trait ExampleEsperModule {
+trait ExampleEsperModule extends EsperModule {
   self: EsperClassification =>
-
-  type EsperEvents = union[Price] #or [Sell] #or [Buy]
-  override def esperEventTypes = new Union[EsperEvents]
 
   val windowSize = 4
   val orderSize = 1000
 
-  val module =
+  installModule(
     s"""
       module SimpleAverageTrader;
 
@@ -36,8 +28,5 @@ trait ExampleEsperModule {
       join Delayed.std:unique(symbol) d on d.symbol = p.symbol
       join Averages a unidirectional on a.symbol = p.symbol
       where a.price > d.price;
-    """
-
-  // install the module and subscribe to the named statements listed
-  installModule(module, List("Buy", "Averages", "Delayed"))
+    """)
 }

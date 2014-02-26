@@ -16,6 +16,9 @@ case class Sell(@BeanProperty symbol: String, @BeanProperty price: Double, @Bean
 
 /**
  * An ActorEventBus routing events to subscribers via Esper rules.
+ * This is the version without modules, installing each EPL rule separately.
+ * The driver below actually uses the ExampleEsperModule instead.
+ * TODO: All this sample code needs to be cleaned up.
  * The sample esper rules implement a simplified trading algorithm
  * @param windowSize  moving window size for the sample trading algorithm
  * @param orderSize   number of shares for buy orders
@@ -67,12 +70,22 @@ class Debugger extends Actor {
   }
 }
 
-class EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule
+/**
+ * This example bus shows the use of an external esper module - all the rules are defined in the ExampleEsperModule trait
+ * module can be loaded from a string, file or URL, anything that translates into a Scala Source
+ */
+class EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule {
+  type EsperEvents = union[Price] #or [Sell] #or [Buy]
+  override def esperEventTypes = new Union[EsperEvents]
+}
 
+/**
+ * Test Driver
+ */
 object EsperEventBusApp extends App {
   // set up the event bus and actor(s)
   val system = ActorSystem()
-  //val evtBus = new EsperEventBusExample(4,1000)
+
   val evtBus = new EsperEventBusWithModuleExample
   val buyer = system.actorOf(Props(classOf[BuyingActor]))
   val debugger = system.actorOf(Props(classOf[Debugger]))

@@ -62,11 +62,7 @@ Update:
 
 Now also supports deploying esper modules (as traits). Here is an example module:
 
-    trait ExampleEsperModule {
-      self: EsperClassification =>
-
-      type EsperEvents = union[Price] #or [Sell] #or [Buy]
-      override def esperEventTypes = new Union[EsperEvents]
+    trait ExampleEsperModule extends EsperModule {
 
       val windowSize = 4
       val orderSize = 1000
@@ -100,6 +96,9 @@ Now also supports deploying esper modules (as traits). Here is an example module
 
 And the event bus definition becomes trivial:
 
-    class EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule
+    class EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule {
+      type EsperEvents = union[Price] #or [Sell] #or [Buy]
+      override def esperEventTypes = new Union[EsperEvents]
+    }
 
 
