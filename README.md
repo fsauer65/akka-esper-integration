@@ -99,4 +99,4 @@ And the event bus definition becomes trivial:
       override def esperEventTypes = new Union[EsperEvents]
     }
 
-
+Loading modules from external resources is also supported. You can read from a File, InputStream, URL, or a scala Source
