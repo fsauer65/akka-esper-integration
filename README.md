@@ -1,7 +1,7 @@
 akka-esper-integration
 ======================
 
-Example how one could integrate Esper with Akka by embedding an esper engine inside an Akka event bus.
+Example how one could integrate [Esper](http://esper.codehaus.org) with Akka by embedding an esper engine inside an Akka event bus.
 Events submitted to the bus are inserted into the engine, whereas actors subscribing to the event bus
 will receive the events published as a result of the esper rules firing.
 
@@ -24,8 +24,8 @@ will receive the events published as a result of the esper rules firing.
         """)
     }
 
-Note the use of union types (from [scalavro](util/src/main/scala/com/gensler/scalavro/util/union.scala)), this allows us to submit events of different types into the bus without
-those types requiring a common super type.
+Note the use of union types (from [scalavro](https://github.com/GenslerAppsPod/scalavro/blob/master/util/src/main/scala/com/gensler/scalavro/util/union.scala)),
+this allows us to submit events of different types into the bus without those types requiring a common super type.
 
 The above event bus is used as follows:
 
