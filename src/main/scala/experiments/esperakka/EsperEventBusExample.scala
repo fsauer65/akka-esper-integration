@@ -74,7 +74,7 @@ class Debugger extends Actor {
  * This example bus shows the use of an external esper module - all the rules are defined in the ExampleEsperModule trait
  * module can be loaded from a string, file or URL, anything that translates into a Scala Source
  */
-class EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule {
+object EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule {
   type EsperEvents = union[Price] #or [Sell] #or [Buy]
   override def esperEventTypes = new Union[EsperEvents]
 }
@@ -86,17 +86,17 @@ object EsperEventBusApp extends App {
   // set up the event bus and actor(s)
   val system = ActorSystem()
 
-  val evtBus = new EsperEventBusWithModuleExample
+  //val evtBus = new EsperEventBusWithModuleExample
   val buyer = system.actorOf(Props(classOf[BuyingActor]))
   val debugger = system.actorOf(Props(classOf[Debugger]))
 
   // subscribe BuyingActor to buy orders
-  evtBus.subscribe(buyer, "Buy")
+  EsperEventBusWithModuleExample.subscribe(buyer, "Buy")
 
   // subscribe to various intermediate streams for debugging/demonstration purposes
-  evtBus.subscribe(debugger, "Feed")
-  evtBus.subscribe(debugger, "Delayed")
-  evtBus.subscribe(debugger, "Averages")
+  EsperEventBusWithModuleExample.subscribe(debugger, "Feed")
+  EsperEventBusWithModuleExample.subscribe(debugger, "Delayed")
+  EsperEventBusWithModuleExample.subscribe(debugger, "Averages")
 
   val prices = Array(
     Price("BP", 7.61), Price("RDSA", 2101.00), Price("RDSA", 2209.00),
@@ -104,10 +104,10 @@ object EsperEventBusApp extends App {
   )
 
   // feed in the market data
-  prices foreach (evtBus.publishEvent(_))
+  prices foreach (EsperEventBusWithModuleExample.publishEvent(_))
 
   // demonstrate we can also submit Sells and Buys to the event bus, thanks to the union type
-  evtBus.publishEvent(Buy("IBM",182.79, 100))
-  evtBus.publishEvent(Sell("NBG",4.71, 1000))
+  EsperEventBusWithModuleExample.publishEvent(Buy("IBM",182.79, 100))
+  EsperEventBusWithModuleExample.publishEvent(Sell("NBG",4.71, 1000))
 }
 

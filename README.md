@@ -63,11 +63,12 @@ Update:
 Now also supports deploying esper modules (as traits). Here is an example module:
 
     trait ExampleEsperModule extends EsperModule {
+      self: EsperClassification =>
 
       val windowSize = 4
       val orderSize = 1000
 
-      val module =
+      installModule(
         s"""
           module SimpleAverageTrader;
 
@@ -88,10 +89,7 @@ Now also supports deploying esper modules (as traits). Here is an example module
           join Delayed.std:unique(symbol) d on d.symbol = p.symbol
           join Averages a unidirectional on a.symbol = p.symbol
           where a.price > d.price;
-        """
-
-      // install the module and subscribe to the named statements listed
-      installModule(module, List("Buy", "Averages", "Delayed"))
+        """)
     }
 
 And the event bus definition becomes trivial:

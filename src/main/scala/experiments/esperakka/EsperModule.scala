@@ -1,6 +1,6 @@
 package experiments.esperakka
 
-import com.espertech.esper.client.{EPException, UpdateListener, EventBean}
+import com.espertech.esper.client.{EventBean=>EB, EPException, UpdateListener}
 import scala.collection.JavaConversions._
 import com.espertech.esper.client.annotation.Name
 import java.net.URL
@@ -20,12 +20,15 @@ trait EsperModule {
       val moduleText = source.mkString
       val deploymentResult = epService.getEPAdministrator.getDeploymentAdmin.parseDeploy(moduleText)
       deploymentResult.getStatements.foreach {s =>
+        // find those statements that have a @Name annotation
         val annotations = s.getAnnotations
         annotations.filter(a => a.annotationType == classOf[Name]).foreach {a =>
           val name = a.asInstanceOf[Name]
-          def notifySubscribers(evt:EventBean) = publish(InternalEvent(name.value(),evt))
+          // use the @Name("value") as the topic when the rule fires
+          def notifySubscribers(evt:EB) = publish(InternalEvent(name.value(),evt))
+          // install an UpdateListener for this rule
           s.addListener(new UpdateListener() {
-            override def update(newEvents: Array[EventBean], oldEvents: Array[EventBean]) {
+            override def update(newEvents: Array[EB], oldEvents: Array[EB]) {
               newEvents foreach (notifySubscribers(_))
             }
           })
