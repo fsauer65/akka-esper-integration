@@ -28,5 +28,7 @@ trait ExampleEsperModule extends EsperModule {
       join Delayed.std:unique(symbol) d on d.symbol = p.symbol
       join Averages a unidirectional on a.symbol = p.symbol
       where a.price > d.price;
-    """)
+    """) { evt => publish(evt)
+
+  }
 }

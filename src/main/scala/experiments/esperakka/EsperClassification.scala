@@ -6,11 +6,8 @@ import com.gensler.scalavro.util.Union._
 import com.gensler.scalavro.util.Union
 import scala.reflect.runtime.{currentMirror => m}
 
-object EventBean {
-  def unapply(evt: com.espertech.esper.client.EventBean) = Some(evt.getEventType, evt.getUnderlying)
-}
 
-abstract trait EsperClassification extends LookupClassification {
+abstract trait EsperClassification extends LookupClassification with EsperEngine {
 
   this : ActorEventBus =>
 
@@ -18,54 +15,20 @@ abstract trait EsperClassification extends LookupClassification {
 
   def esperEventTypes:Union[EsperEvents]
 
-  case class InternalEvent (topic:String, evt: EventBean)
-
-  type Event = InternalEvent
+  type Event = EsperEvent
   type Classifier = String
-
-  val esperConfig = new Configuration()
 
   // this is cool, types are now automagically registered when we need them to, but it would be even cooler
   // if we did not have to ask the application programmer to instantiate the Union... missing TYpeTags if we attempt to do it here
   esperEventTypes.typeMembers() foreach(t => registerEventType(t.typeSymbol.name.toString, m.runtimeClass(t)))
 
-  // these now no longer have to be lazy, since types are guaranteed to be registered at this point
-  val epService = EPServiceProviderManager.getDefaultProvider(esperConfig)
-  val epRuntime = epService.getEPRuntime
 
   protected def mapSize() = 2
 
-  private def registerEventType(name:String, clz: Class[_ <: Any]) {
-    esperConfig.addEventType(name, clz.getName)
-  }
-
-  protected def classify(event: InternalEvent): Classifier = event.topic
+  protected def classify(event: EsperEvent): Classifier = event.eventType
 
   // from LookupCLassification
-  protected def publish(event: InternalEvent, subscriber: Subscriber): Unit = {
-    subscriber ! event.evt
-  }
-
-  /**
-   * @param evt this event wil be inserted into the esper runtime
-   * @tparam T anything type that can be proven to be part of type EsperEvents - allows for union types
-   */
-  def publishEvent[T: prove[EsperEvents]#containsType](evt:T) {
-    epRuntime.sendEvent(evt)
-  }
-
-  private def createEPL(epl:String)(notifySubscribers: EventBean=>Unit) {
-    try {
-      val stat = epService.getEPAdministrator.createEPL(epl)
-      stat.addListener(new UpdateListener() {
-        override def update(newEvents: Array[EventBean], oldEvents: Array[EventBean]) {
-          newEvents foreach (notifySubscribers(_))
-        }
-      })
-    } catch {
-      case x: EPException => println(x.getLocalizedMessage)
-    }
-  }
+  protected def publish(event: Event, subscriber: Subscriber): Unit = subscriber ! event
 
   /**
    * Create an EPL statement with the given epl.
@@ -74,7 +37,7 @@ abstract trait EsperClassification extends LookupClassification {
    * @param epl
    */
   def epl(epl: String) {
-    createEPL(epl) {evt => publish(InternalEvent(evt.getEventType.getName,evt))}
+    createEPL(epl) {evt => publish(evt)}
   }
 
   /**
@@ -86,7 +49,7 @@ abstract trait EsperClassification extends LookupClassification {
    * @param epl
    */
   def epl(evtType:String, epl: String) {
-    createEPL(epl) {evt => publish(InternalEvent(evtType,evt))}
+    createEPL(epl) {evt => publish(EsperEvent(evtType,evt.underlying))}
   }
 
 }

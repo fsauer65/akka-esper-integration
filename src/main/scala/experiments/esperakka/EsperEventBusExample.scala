@@ -60,13 +60,13 @@ class EsperEventBusExample(windowSize:Int, orderSize: Int) extends ActorEventBus
 
 class BuyingActor extends Actor {
   def receive = {
-    case EventBean(_,Buy(sym,price,amt)) => println(s"Buyer got a new order: $amt $sym @ $$$price")
+    case EsperEvent(_,Buy(sym,price,amt)) => println(s"Buyer got a new order: $amt $sym @ $$$price")
   }
 }
 
 class Debugger extends Actor {
   def receive = {
-    case EventBean(evtType,underlying) => println(s"DEBUG -  ${evtType.getName} : $underlying")
+    case EsperEvent(evtType, underlying) => println(s"Got a $evtType: $underlying")
   }
 }
 
@@ -104,10 +104,10 @@ object EsperEventBusApp extends App {
   )
 
   // feed in the market data
-  prices foreach (EsperEventBusWithModuleExample.publishEvent(_))
+  prices foreach (EsperEventBusWithModuleExample.insertEvent(_))
 
   // demonstrate we can also submit Sells and Buys to the event bus, thanks to the union type
-  EsperEventBusWithModuleExample.publishEvent(Buy("IBM",182.79, 100))
-  EsperEventBusWithModuleExample.publishEvent(Sell("NBG",4.71, 1000))
+  EsperEventBusWithModuleExample.insertEvent(Buy("IBM",182.79, 100))
+  EsperEventBusWithModuleExample.insertEvent(Sell("NBG",4.71, 1000))
 }
 
