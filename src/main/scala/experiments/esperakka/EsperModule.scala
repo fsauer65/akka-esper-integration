@@ -6,6 +6,8 @@ import com.espertech.esper.client.annotation.Name
 import java.net.URL
 import scala.io.Source
 import java.io.{InputStream, File}
+import scala.util.{Failure, Success, Try}
+import com.espertech.esper.client.deploy.DeploymentResult
 
 trait EsperModule {
   self: EsperEngine =>
@@ -15,7 +17,7 @@ trait EsperModule {
    * with a @Name annotation. Use the @Name value as the subscription topic
    * @param source content for the esper module to install
    */
-  def installModule(source:Source)(notifySubscribers: EsperEvent=>Unit):Unit = {
+  def installModule(source:Source)(notifySubscribers: EsperEvent=>Unit):Try[DeploymentResult] = {
     try {
       val moduleText = source.mkString
       val deploymentResult = epService.getEPAdministrator.getDeploymentAdmin.parseDeploy(moduleText)
@@ -33,8 +35,9 @@ trait EsperModule {
           })
         }
       }
+      Success(deploymentResult)
     } catch {
-      case x: EPException => println(x.getLocalizedMessage)
+      case x: EPException => Failure(x)
     } finally {
       source.close()
     }
