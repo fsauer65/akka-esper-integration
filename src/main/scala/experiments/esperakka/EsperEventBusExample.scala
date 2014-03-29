@@ -18,14 +18,13 @@ case class Sell(@BeanProperty symbol: String, @BeanProperty price: Double, @Bean
  * An ActorEventBus routing events to subscribers via Esper rules.
  * This is the version without modules, installing each EPL rule separately.
  * The driver below actually uses the ExampleEsperModule instead.
- * TODO: All this sample code needs to be cleaned up.
  * The sample esper rules implement a simplified trading algorithm
  * @param windowSize  moving window size for the sample trading algorithm
  * @param orderSize   number of shares for buy orders
  */
 class EsperEventBusExample(windowSize:Int, orderSize: Int) extends ActorEventBus with EsperClassification {
 
-  type EsperEvents = union[Price] #or [Sell] #or [Buy]
+  type EsperEvents = union[Price] #or [Buy] #or [Sell]
 
   // unfortunately this has to be defined here where the type evidence is available to the compiler.
   // this will be the exact same in every event bus using EsperClassification, you can copy/paste (YUCK!) it.
@@ -74,7 +73,7 @@ class Debugger extends Actor {
  * This example bus shows the use of an external esper module - all the rules are defined in the ExampleEsperModule trait
  * module can be loaded from a string, file or URL, anything that translates into a Scala Source
  */
-object EsperEventBusWithModuleExample extends ActorEventBus with EsperClassification with ExampleEsperModule {
+object EsperModuleEventBus extends ActorEventBus with EsperClassification with ExampleEsperModule {
   type EsperEvents = union[Price] #or [Sell] #or [Buy]
   override def esperEventTypes = new Union[EsperEvents]
 }
@@ -86,17 +85,17 @@ object EsperEventBusApp extends App {
   // set up the event bus and actor(s)
   val system = ActorSystem()
 
-  //val evtBus = new EsperEventBusWithModuleExample
+  //val evtBus = new EsperEventBusExample(4,1000)
   val buyer = system.actorOf(Props(classOf[BuyingActor]))
   val debugger = system.actorOf(Props(classOf[Debugger]))
 
   // subscribe BuyingActor to buy orders
-  EsperEventBusWithModuleExample.subscribe(buyer, "Buy")
+  EsperModuleEventBus.subscribe(buyer, "Buy")
 
   // subscribe to various intermediate streams for debugging/demonstration purposes
-  EsperEventBusWithModuleExample.subscribe(debugger, "Feed")
-  EsperEventBusWithModuleExample.subscribe(debugger, "Delayed")
-  EsperEventBusWithModuleExample.subscribe(debugger, "Averages")
+  EsperModuleEventBus.subscribe(debugger, "Feed")
+  EsperModuleEventBus.subscribe(debugger, "Delayed")
+  EsperModuleEventBus.subscribe(debugger, "Averages")
 
   val prices = Array(
     Price("BP", 7.61), Price("RDSA", 2101.00), Price("RDSA", 2209.00),
@@ -104,10 +103,11 @@ object EsperEventBusApp extends App {
   )
 
   // feed in the market data
-  prices foreach (EsperEventBusWithModuleExample.insertEvent(_))
+  prices foreach (EsperModuleEventBus.broadcast(_))
 
   // demonstrate we can also submit Sells and Buys to the event bus, thanks to the union type
-  EsperEventBusWithModuleExample.insertEvent(Buy("IBM",182.79, 100))
-  EsperEventBusWithModuleExample.insertEvent(Sell("NBG",4.71, 1000))
+  EsperModuleEventBus.broadcast(Buy("IBM",182.79, 100))
+  EsperModuleEventBus.broadcast(Sell("NBG",4.71, 1000))
+  //EsperModuleEventBus.broadcast("Hello there!") won't compile!
 }
 

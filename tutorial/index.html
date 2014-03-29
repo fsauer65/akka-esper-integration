@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>CEP WIth Akka and Esper</title>
+</head>
+<body>
+
+<div><h2>Introduction</h2>
+<p><a href="http://www.espertech.com">Esper</a> is a popular open source Complex Event Processing (CEP) engine.
+The ideas of CEP are a good fit with the Akka actor model and this code explores these ideas.
+It is also described in a series of blog posts on <a href="http://franklysauer.com">franklysauer.com</a>.
+The code is all available on <a href="https://github.com/fsauer65/akka-esper-integration">github</a> and you
+can use it any way you see fit.</p>
+    <p>The next 2 sections explain how Esper can be wrapped up in a few scala traits
+        (by no means meant to be a comprehensive scala API to esper!), and the 2 sections after that show
+    how you can use those traits to embed esper in either an Akka actor or an akka event bus.</p>
+
+    <p>This is not meant to be an EPL tutorial. For details on EPL please read the
+        <a href="http://esper.codehaus.org/esper-4.4.0/doc/reference/en/html_single/#epl_clauses">EPL reference</a>.
+    The sample EPL used in this code implements a simple and totally fake trading algorithm.
+    It generates a Buy iff the moving average of a given window length is higher than the oldest
+    price in that window (in other words, it is trending upwards). To do so, it inserts incoming Price events into two
+    streams, a 'Delayer' and an 'Averager'. These two streams are then joined to generate the trades.</p>
+    <p>The Price events inserted into the CEP engine are instances of a scala Price case class. This works because its fields
+    are annotated with @BeanProperty and it gets registered as an Esper Event type.</p>
+</div>
+<div><h2>Wrapping Esper</h2>
+<p>
+    The <a href="#code/src/main/scala/experiments/esperakka/EsperEngine.scala" class="shortcut">EsperEngine</a> trait
+encapsulates the bare minimum code required to get a functional esper engine up and running. It is written as a trait
+so that it can be used both with an Actor and an Event Bus as shown in the next two sections.</p>
+<p>Note that <b>epService</b> and <b>epRuntime</b> are declared lazy. This is needed to ensure they are not instantiated
+until after all the event types are registered with the esperConfig. When using this trait it is critical that you register all
+the required esper event types BEFORE creating any EPL statements using <b>createEPL</b>.</p>
+<p>Creating EPL statements is done with <b>createEPL</b> which takes the statement text and a function that is invoked when the statement
+fires and produces events. The parameter type to the callback is <b>EsperEvent</b>. Here is an Example: </p><pre><code>
+createEPL(s"""
+        insert into Averages
+        select symbol,avg(price) as price
+        from Price.std:groupwin(symbol).win:length_batch($windowSize) group by symbol
+        """) { evt => println(s"Got a ${evt.evtType}: ${evt.underlying}")
+
+}
+</code></pre>
+</div>
+<div><h2>Esper Modules</h2>
+    <p>In the previous section we saw how to register single EPL statements using <b>createEPL</b>. Esper also supports the concept of modules that
+       can contain multiple statements, import other modules, etc. See
+        <a href="http://esper.codehaus.org/esper-4.0.0/doc/reference/en/html/packaging_deployment.html#deploy-eplmodule">Esper Module Syntax</a>
+        for all the details.</p>
+    <p>The <a href="#code/src/main/scala/experiments/esperakka/EsperModule.scala" class="shortcut">EsperModule</a> trait wraps this idea.
+    You can mix-in this trait into anything that also mixes in the EsperEngine trait which is enforced by the self type.</p>
+    <p>Use <b>installModule</b> to deploy an esper module into the engine. Since a module may contain many EPL statements and we are probably not
+    interested in many of the intermediary events being passed from stream to stream, only statements annotated with a <b>@Name</b> annotation will
+    get a listener installed on them. The eventType of the resulting EsperEvent is the value of this <b>@Name</b> annotation.
+    The following shows an example with a module defined in an embedded string. Modules can also be loaded from various other sources.</p>
+    <pre><code>
+     installModule(s"""
+        module SimpleAverageTrader;
+
+        insert rstream into Delayed
+        select rstream symbol,price
+        from Price.std:groupwin(symbol).win:length(${windowSize-1});
+
+        insert into Averages
+        select symbol,avg(price) as price
+        from Price.std:groupwin(symbol).win:length_batch($windowSize) group by symbol;
+
+        @Name("Buy")
+        insert into Buy
+        select p.symbol, p.price, $orderSize as amount
+        from Price.std:unique(symbol) p
+        join Delayed.std:unique(symbol) d on d.symbol = p.symbol
+        join Averages a unidirectional on a.symbol = p.symbol
+        where a.price > d.price;
+        """) { evt => // will only get called when the Buy rule fires
+           println(s"Got a ${evt.evtType}: ${evt.underlying}")
+     }
+    </code></pre>
+</div>
+<div><h2>CEP in an Akka Actor</h2>
+    In this section we will explore embedding Esper inside an actor.
+    <p>This <a href="#code/src/main/scala/experiments/esperakka/EsperActor.scala" class="shortcut">EsperActor</a>
+    will accept messages to register esper event types,
+    install EPL statement or entire modules, and finally to start processing events.</p>
+    <p>All the messages are defined in the companion object to the esper actor class. On receipt of the StartProcessing message
+    the actor uses <b>become</b> to change its behavior so that all subsequent messages are inserted into the now
+    initialized and started esper engine.</p>
+    <p>The <b>DeployStatement</b> message contains an <b>Option[ActorRef]</b>. This actor ref is used as the receiver for EsperEvent messages
+    that are sent when the EPL statement invokes its update listener. If you don't require a callback simply use <b>None</b>.</p>
+    <p>The <b>DeployModule</b> message is very similar but it deploys an entire esper module and since those contain multiple statements,
+        the listeners are a map that maps event types to actor refs. If you want to send the events produced by a statement with
+        annotation @Name("Foo") to actor ref Bar, use <code>Map("Foo"->Bar)</code>.</p>
+
+    The <a href="#code/src/main/scala/experiments/esperakka/EsperActorExample.scala" class="shortcut">EsperActorExample</a> shows
+    how to use this actor using individual EPL statements.
+    The <a href="#code/src/main/scala/experiments/esperakka/EsperActorModuleExample.scala" class="shortcut">EsperActorModuleExample</a>
+    demonstrates the use of the DeployModule message.
+    <p>Note that there is a lot of room for improvement here, especially with respect to error handling.
+        We should probably use a supervisor to deal with exceptions, especially during the initialization, where we can
+    encounter bad EPL or unregistered event types, etc.</p>
+</div>
+<div><h2>CEP in an Akka Event Bus</h2>
+An alternative way to incorporate esper in an actor system is by using it as a message classifier in an Eventbus. This is implemented in the
+    <a href="#code/src/main/scala/experiments/esperakka/EsperClassification.scala" class="shortcut">EsperClassification</a> trait, which extends
+    the standard akka eventbus LookupClassification trait. This trait defines an abstract type EsperEvents that must be defined in a concrete
+    implementation of an event bus using this EsperClassification trait.
+    <p>To make things a bit more interesting, it makes use of the <b>Union</b> type
+    from the <a href="http://maven-repository.com/artifact/com.gensler/scalavro-util_2.10/0.6.2">scalavro</a> library,
+    which in turn is based on <a href="http://www.chuusai.com/2011/06/09/scala-union-types-curry-howard/">this amazing type sorcery</a>...</p>
+    This allows us to define multiple event types as acceptable to be posted on the bus. This is type checked at compile time, and
+    they could be any combination of primitives, case classes, collections, etc. Any calls to broadcast with type outside the Union will result in a compile
+    time error; for example, calling <code>EsperModuleEventBus.broadcast("Hello there!")</code> in the
+    <a href="#code/src/main/scala/experiments/esperakka/EsperEventBusExample.scala" class="shortcut">EsperEventBusExample</a> will result in:
+    <pre><code>
+        Cannot prove that com.gensler.scalavro.util.Union.not[com.gensler.scalavro.util.Union.not[String]] &lt;:&lt; experiments.esperakka.EsperModuleEventBus.EsperEvents.
+        EsperModuleEventBus.broadcast("Hello there!")
+        ^
+    </code></pre>
+    All events put on the bus using <code>broadcast</code> are inserted into the esper engine and the bus - which
+    has registered itself as the update listener with the EPL statements - will publish all the <b>EsperEvent</b>s coming out of the esper engine
+    with the event type as the topic. It does so using the mechanisms of its parent LookupClassification trait, so any actor that has
+    subscribed to the event type will receive these events. The examples show how to subscribe. There are two example bus implementations defined
+    in the example. One example uses the <code>epl</code> method to install individual EPL statements, the other mixes in the
+    <a href="#code/src/main/scala/experiments/esperakka/ExampleEsperModule.scala" class="shortcut">ExampleEsperModule</a>
+    trait to deploy an entire esper module into the bus. Defining a bus this way is so compact it can be shown right here:
+    <pre><code>
+    object EsperModuleEventBus extends ActorEventBus with EsperClassification with ExampleEsperModule {
+      type EsperEvents = union[Price] #or [Sell] #or [Buy]
+      override def esperEventTypes = new Union[EsperEvents]
+    }
+    </code></pre>
+    The <code>override def esperEventTypes = new Union[EsperEvents]</code> will
+    always be exactly same, but unfortunately we can't pull it up because of a technicality of TypeTags...
+</div>
+</body>
+</html>

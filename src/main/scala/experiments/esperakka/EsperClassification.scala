@@ -19,9 +19,8 @@ abstract trait EsperClassification extends LookupClassification with EsperEngine
   type Classifier = String
 
   // this is cool, types are now automagically registered when we need them to, but it would be even cooler
-  // if we did not have to ask the application programmer to instantiate the Union... missing TYpeTags if we attempt to do it here
+  // if we did not have to ask the application programmer to instantiate the Union... missing TypeTags if we attempt to do it here
   esperEventTypes.typeMembers() foreach(t => registerEventType(t.typeSymbol.name.toString, m.runtimeClass(t)))
-
 
   protected def mapSize() = 2
 
@@ -52,4 +51,9 @@ abstract trait EsperClassification extends LookupClassification with EsperEngine
     createEPL(epl) {evt => publish(EsperEvent(evtType,evt.underlying))}
   }
 
+  /**
+   * typed version of insertEvent, enforcing the union type defined in EsperEvents
+   * @param event
+   */
+  def broadcast[T: prove[EsperEvents]#containsType](event: T): Unit = insertEvent(event)
 }
