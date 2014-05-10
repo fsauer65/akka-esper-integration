@@ -134,5 +134,11 @@ An alternative way to incorporate esper in an actor system is by using it as a m
     The <code>override def esperEventTypes = new Union[EsperEvents]</code> will
     always be exactly same, but unfortunately we can't pull it up because of a technicality of TypeTags...
 </div>
+<div><h2>CEP using Akka Streams</h2>
+As a final example let's look at how to implement this same algorithm without Esper but rather using the recently announced <a href="http://typesafe.com/blog/typesafe-announces-akka-streams">Akka Streams</a>.
+<p><a href="#code/src/main/scala/experiments/streams/StreamCEP.scala" class="shortcut">StreamCEP</a> is the akka stream implementation of the algorithm.
+It demonstrates the Flow DSL and some of its primitives like groupBy, grouped , filter and map to implement the same rule implemented earlier using esper.
+<p>For a step-by-step walk-through see my <a href="http://www.franklysauer.com/?p=79">blog</a>
+</div>
 </body>
 </html>

@@ -19,7 +19,8 @@ object StreamCEP extends App {
     Price("BP",7.66), Price("BP", 7.64), Price("BP", 7.67)
   )
 
-  val WINDOW = 4
+  val WINDOWSIZE = 4
+  val ORDERSIZE=1000
 
   def sum(prices: Seq[Price]):Double = prices.foldLeft(0.0)((partial, price) => partial + price.price)
   def avg(prices: Seq[Price]):Double = sum(prices) / prices.size
@@ -33,11 +34,11 @@ object StreamCEP extends App {
        case (symbol, producer) =>
           Flow(producer).
             // chunk the stream by the window size
-            grouped(WINDOW).
+            grouped(WINDOWSIZE).
             // the actual rule! only let through each complete window for which avg > first
-            filter(window => window.size == WINDOW && avg(window) > window.head.price).
+            filter(window => window.size == WINDOWSIZE && avg(window) > window.head.price).
             // for those that pass, generate a Buy
-            map(window => Buy(symbol, window.reverse.head.price, 1000)).
+            map(window => Buy(symbol, window.reverse.head.price, ORDERSIZE)).
             // send to market - for now just print them :-)
             foreach(buy => println(s"generated a buy:  $buy")).
             consume(materializer)
