@@ -1,7 +1,7 @@
 akka-esper-integration
 ======================
 
-Example how one could integrate [Esper](http://esper.codehaus.org) with Akka by embedding an esper engine inside an Akka event bus.
+Example how one could integrate [Esper](http://esper.codehaus.org) with Akka by embedding an esper engine inside an Akka event bus or Actor.
 Events submitted to the bus are inserted into the engine, whereas actors subscribing to the event bus
 will receive the events published as a result of the esper rules firing.
 
@@ -100,3 +100,7 @@ And the event bus definition becomes trivial:
     }
 
 Loading modules from external resources is also supported. You can read from a File, InputStream, URL, or a scala Source
+
+#Akka Streans
+
+Now also includes an example of stream processing using Akka Streams instead of Esper.
