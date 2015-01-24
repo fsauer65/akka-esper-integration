@@ -2,7 +2,7 @@ package experiments.streams
 
 import akka.actor.ActorSystem
 import akka.stream.FlowMaterializer
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl._
 import akka.stream.stage.{PushStage, Directive, Context}
 import scala.concurrent.duration._
 import scala.concurrent.duration.FiniteDuration
@@ -49,6 +49,9 @@ object time extends App {
       pending.get(k) match {
 
         case Some(previous) if predicate(evt) =>
+          // predicate holds for an event we already saw before
+          // if elapsed time >= duration, reduce and push downstream,
+          // otherwise add to cache and pull
           val withNext = previous :+ now -> evt
           if (now - previous.head._1 >= nanos) {
             pending = pending - k
@@ -59,16 +62,19 @@ object time extends App {
           }
 
         case Some(previous) if !predicate(evt) =>
+          // predicate no longer holds for pending events, remove key from cache and pull
           pending = pending - k
           ctx.pull
 
         case None if predicate(evt) =>
+          // predicate holds for an event we have not yet seen, add to cache and pull
           pending = pending + (k -> Vector(now->evt))
           ctx.pull
 
         case _ =>
+          // none of the above, good time to remove stale entries from the cache
           for {
-            (k,(t,_)::_) <- pending
+            (k,(t,_)::_) <- pending // get key and oldest timestamp
             if (now - t) > nanos
           } yield {pending = pending - k}
           ctx.pull
@@ -78,9 +84,43 @@ object time extends App {
   }
 
 
-  val ticks = Source(0 second, 100 millis, () => "Hello")
+  // test data
 
-  val flow = ticks.transform(() => new FilterFor[String,String](1 seconds)(x => true)).to(Sink.foreach(println(_)))
+  case class Tick(time:Long)
 
+  case class Price(symbol:String, price: Double, time:Long = 0)
+
+  def priceKey (p:Price):String = p.symbol
+
+  val data = Source(List[Price](
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18),
+      Price("IBM",155.87), Price("MSFT",47.18)
+  ))
+
+  // emit a tick every 100 millis
+  val ticks = Source(0 second, 100 millis, () => Tick(System.nanoTime()))
+
+  val quotes: Source[Price] = Source() { implicit b =>
+     import FlowGraphImplicits._
+     val out = UndefinedSink[Price]
+     val zip = ZipWith[Tick,Price,Price]((t,p)=> p.copy(time = t.time))
+     ticks ~> zip.left
+     data ~> zip.right
+     zip.out ~> out
+     out
+  }
+
+  val flow = quotes.transform(() => new FilterFor[Price,String](1 seconds)(q => q.price > 150)(priceKey)).to(Sink.foreach(println(_)))
+  //val flow = quotes.to(Sink.foreach(println(_)))
   flow.run()
 }
+
