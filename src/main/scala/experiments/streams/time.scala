@@ -3,7 +3,7 @@ package experiments.streams
 import akka.actor.ActorSystem
 import akka.stream.FlowMaterializer
 import akka.stream.scaladsl._
-import akka.stream.stage.{PushStage, Directive, Context}
+import akka.stream.stage.{Stage, PushStage, Directive, Context}
 import scala.concurrent.duration._
 import scala.concurrent.duration.FiniteDuration
 
@@ -83,6 +83,13 @@ object time extends App {
 
   }
 
+  // pimp the dsl
+  implicit class FilterForInSource[E](s: Source[E]) {
+    def filterFor[K](duration:FiniteDuration)(predicate: E=>Boolean)
+                 (key: E => K = (evt:E)=>evt.asInstanceOf[K],
+                  reduce: Seq[(Long,E)] => E = (evts:Seq[(Long,E)])=>evts.head._2):Source[E] =
+      s.transform(() => new FilterFor(duration)(predicate)(key,reduce))
+  }
 
   // test data
 
@@ -119,8 +126,7 @@ object time extends App {
      out
   }
 
-  val flow = quotes.transform(() => new FilterFor[Price,String](1 seconds)(q => q.price > 150)(priceKey)).to(Sink.foreach(println(_)))
-  //val flow = quotes.to(Sink.foreach(println(_)))
-  flow.run()
+  quotes.filterFor(1 seconds)(q => q.price > 150)(priceKey).to(Sink.foreach(println(_))).run
+
 }
 
