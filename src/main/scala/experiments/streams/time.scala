@@ -33,9 +33,9 @@ object time extends App {
    * @tparam E          Event type
    * @tparam K          Key type
    */
-  class FilterFor[E,K](duration : FiniteDuration)(predicate: E => Boolean)
-                      (key: E => K = (evt:E)=>evt.asInstanceOf[K],
-                       reduce: Seq[(Long,E)] => E = (evts:Seq[(Long,E)])=>evts.head._2) extends PushStage[E,E] {
+  class FilterFor[E,K](duration : FiniteDuration)
+                      (key: E => K, reduce: Seq[(Long,E)] => E)
+                      (predicate: E => Boolean) extends PushStage[E,E] {
 
     var pending : Map[K,Seq[(Long,E)]] = Map.empty
     val nanos = duration.toNanos
@@ -44,7 +44,7 @@ object time extends App {
     override def onPush(evt: E, ctx: Context[E]): Directive = {
 
       val k = key(evt)
-      val now = System.nanoTime()
+      val now = System.nanoTime
 
       pending.get(k) match {
 
@@ -88,45 +88,49 @@ object time extends App {
     def filterFor[K](duration:FiniteDuration)(predicate: E=>Boolean)
                  (key: E => K = (evt:E)=>evt.asInstanceOf[K],
                   reduce: Seq[(Long,E)] => E = (evts:Seq[(Long,E)])=>evts.head._2):Source[E] =
-      s.transform(() => new FilterFor(duration)(predicate)(key,reduce))
+      s.transform(() => new FilterFor(duration)(key,reduce)(predicate))
   }
 
   // test data
 
   case class Tick(time:Long)
 
-  case class Price(symbol:String, price: Double, time:Long = 0)
+  case class Temperature(sensor:String, value: Double, time:Long = 0)
 
-  def priceKey (p:Price):String = p.symbol
-
-  val data = Source(List[Price](
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18),
-      Price("IBM",155.87), Price("MSFT",47.18)
+  val data = Source(List[Temperature](
+      Temperature("S1",100), Temperature("S2",47.18),
+      Temperature("S1",101), Temperature("S2",47.18),
+      Temperature("S1",102), Temperature("S2",47.18),
+      Temperature("S1",105), Temperature("S2",47.18),
+      Temperature("S1",100), Temperature("S2",47.18),
+      Temperature("S1",101), Temperature("S2",47.18),
+      Temperature("S1",102), Temperature("S2",47.18),
+      Temperature("S1",103), Temperature("S2",47.18),
+      Temperature("S1",101), Temperature("S2",47.18),
+      Temperature("S1",102), Temperature("S2",47.18),
+      Temperature("S1",100), Temperature("S2",47.18)
   ))
 
   // emit a tick every 100 millis
   val ticks = Source(0 second, 100 millis, () => Tick(System.nanoTime()))
 
-  val quotes: Source[Price] = Source() { implicit b =>
+  val temps: Source[Temperature] = Source() { implicit b =>
      import FlowGraphImplicits._
-     val out = UndefinedSink[Price]
-     val zip = ZipWith[Tick,Price,Price]((t,p)=> p.copy(time = t.time))
+     val out = UndefinedSink[Temperature]
+     val zip = ZipWith[Tick,Temperature,Temperature]((t,p)=> p.copy(time = t.time))
      ticks ~> zip.left
      data ~> zip.right
      zip.out ~> out
      out
   }
 
-  quotes.filterFor(1 seconds)(q => q.price > 150)(priceKey).to(Sink.foreach(println(_))).run
+  def tempKey (t:Temperature):String = t.sensor
+  def tempReduce (ts: Seq[(Long,Temperature)]):Temperature = {
+    def compare(t1: (Long,Temperature),t2 : (Long,Temperature)) = if (t1._2.value > t2._2.value) t1 else t2
+    ts.reduceLeft(compare)._2
+  }
+
+  temps.filterFor(1 seconds)(t => t.value >= 100)(tempKey,tempReduce).to(Sink.foreach(println(_))).run
 
 }
 
